@@ -1,0 +1,19 @@
+{
+  "service": "exercise-prescription-safety",
+  "source_context": "http://health.people.com.cn/n1/2026/0918/c14739-40800811.html",
+  "sample": {
+    "patient_ref": "PSEUDO-001",
+    "assessment": {
+      "joint_injury": false,
+      "blood_pressure_stable": true
+    },
+    "plan": {
+      "pace_kmh": [
+        4,
+        6
+      ],
+      "minutes": 30,
+      "weekly_sessions": 3
+    }
+  }
+}
