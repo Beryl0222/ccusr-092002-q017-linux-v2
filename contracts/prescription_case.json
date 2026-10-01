@@ -1,5 +1,6 @@
 {
   "service": "exercise-prescription-safety",
+  "schema_version": "1.0.0",
   "source_context": "http://health.people.com.cn/n1/2026/0918/c14739-40800811.html",
   "sample": {
     "patient_ref": "PSEUDO-001",
@@ -15,5 +16,108 @@
       "minutes": 30,
       "weekly_sessions": 3
     }
+  },
+  "semantics": {
+    "principle": "安全服务只做禁忌筛查、剂量建议与事件监测，不做诊断；紧急症状仅输出明确就医提示。任何获准/暂停/升级决定都必须可由规则包版本与事件序列完整重放。",
+    "fail_closed": "事件缺失、乱序、迟到、未知类型或载荷不合法时，一律视为数据不足，禁止当作安全；当日结论降级为 WITHHOLD/PAUSE 并生成人工复核需求。",
+    "contraindication_levels": {
+      "ABSOLUTE": "禁止开具超慢跑处方，任何医生覆盖均无效（系统强制阻断），仅可记录 NOT_PRESCRIBABLE 决定。",
+      "RELATIVE": "默认暂缓；具备相应权限的医生可在写明理由与有效期后覆盖，且只能降档起步、缩短有效期并安排复核。",
+      "ADAPTIVE": "不禁止开具，但剂量必须按规则自适应（降速、缩短时长、加强监测、延长热身）。"
+    },
+    "decisions": {
+      "APPROVE": "当日获准按处方活动。",
+      "WITHHOLD": "数据不足或未完成安全前置（缺失/乱序/迟到/未知事件），不予获准——缺数据不等于安全。",
+      "PAUSE": "触发暂停条件，立即停止当日活动。",
+      "ESCALATE": "需要人工复核（临床团队），按复核意见处理。",
+      "EMERGENCY_ADVICE": "出现紧急症状，只给出明确就医提示，系统不自动诊断、不解释病因。",
+      "NOT_PRESCRIBABLE": "存在绝对禁忌，不能为该患者开具此类运动处方。",
+      "NO_SESSION": "当日未安排或未开始活动（非计划训练日），仅作记录，不代表安全获准。"
+    },
+    "versioning": {
+      "rule_pack": "每个规则包有不可变 rule_pack_id（名称+语义版本），所有决定记录引用该 id；规则包一经发布不可修改，只可发布新版本。",
+      "prescription": "每次开具/调整生成新的 prescription_version，账本同时保存 before 与 after 全文与变更原因，旧版本永不被覆盖。"
+    },
+    "override": {
+      "required_fields": ["clinician_id", "authority", "reason", "valid_until"],
+      "rule": "医生覆盖 RELATIVE 禁忌或安全阈值时，必须记录临床理由、本人权限级别与覆盖有效期；到期自动失效。ABSOLUTE 禁忌不可被覆盖。覆盖只影响被点名的规则。",
+      "authority_levels": ["ATTENDING", "SPECIALIST"]
+    },
+    "replay": {
+      "rule": "给定患者、任意自然日与账本（评估、处方版本、覆盖、按序事件），重放必须得到与当日完全一致的决定码、触发规则与提示。"
+    }
+  },
+  "events": {
+    "ordering": "事件须携带 event_id、ts（ISO8601 时间戳）、seq（设备/患者单调递增序号）、patient_ref 与 type；按 (patient_ref, seq) 判定乱序与缺口，按 ts 判定迟到。",
+    "required_startup": ["symptom_check", "vitals_reading"],
+    "types": {
+      "symptom_check": {
+        "required": ["symptoms"],
+        "symptoms": [
+          "chest_pain",
+          "dyspnea_at_rest",
+          "syncope",
+          "palpitations",
+          "unexplained_dizziness",
+          "severe_joint_pain",
+          "acute_injury",
+          "fever",
+          "none"
+        ],
+        "emergency_symptoms": ["chest_pain", "syncope", "dyspnea_at_rest"],
+        "effect": "出现 emergency_symptoms => EMERGENCY_ADVICE（仅就医提示）并 PAUSE；severe_joint_pain/acute_injury => PAUSE+ESCALATE；fever/unexplained_dizziness/palpitations => WITHHOLD+ESCALATE；症状缺失 => WITHHOLD。"
+      },
+      "vitals_reading": {
+        "required": ["systolic_mmhg", "diastolic_mmhg", "heart_rate_bpm", "glucose_mmol_l"],
+        "effect": "任一必需指标缺失或越界 => WITHHOLD/PAUSE（见 thresholds），不得忽略异常值。"
+      },
+      "session_start": {
+        "required": ["ts"],
+        "effect": "未完成 required_startup 或未获 APPROVE 前收到 => WITHHOLD（视为不安全开跑）。"
+      },
+      "hr_sample": {
+        "required": ["hr_bpm"],
+        "effect": "超过处方心率上限 => DEVIATION；连续越限或达到暂停阈值 => PAUSE。"
+      },
+      "pace_sample": {
+        "required": ["pace_kmh"],
+        "effect": "快于处方配速区间上限 => DEVIATION。"
+      },
+      "symptom_onset": {
+        "required": ["symptom"],
+        "effect": "运动中出现紧急症状 => EMERGENCY_ADVICE+PAUSE；其余预警症状 => PAUSE+ESCALATE。"
+      },
+      "pause_request": {
+        "required": ["reason"],
+        "effect": "患者或设备主动暂停 => PAUSE。"
+      },
+      "session_end": {
+        "required": ["duration_min"],
+        "effect": "汇总当日时长；未收到 session_start 直接结束 => 数据异常 WITHHOLD 复核。"
+      }
+    }
+  },
+  "data_quality": {
+    "missing": "应有而未到的事件或必填字段（如日终仍无 vitals_reading）。",
+    "out_of_order": "seq 小于该患者已见最大 seq。",
+    "gap": "相邻事件 seq 之差大于 1。",
+    "late": "事件 ts 早于当前日界窗口内已处理事件，或在日结后到达。",
+    "unknown_type": "type 不在 events.types 清单内。",
+    "handling": "以上全部 fail-closed：阻断当日获准并生成 review_required，记录 quality_flags；乱序事件不参与自动决策，仅在复核视图可见。"
+  },
+  "intake": {
+    "assessment_fields": [
+      "diagnoses",
+      "recent_metrics",
+      "medications",
+      "activity_baseline",
+      "permission_opinion",
+      "measured_on"
+    ],
+    "note": "医务人员录入诊断、近期指标、用药、活动基础与许可意见；指标带日期，超过规则包规定天数视为陈旧 => WITHHOLD 直到复测。"
+  },
+  "plan": {
+    "fields": ["pace_kmh_range", "hr_zone", "minutes", "weekly_sessions", "warmup_min", "progression"],
+    "progression_rule": "每周时长或里程增幅受限；存在 ADAPTIVE 因素时增幅进一步下调；未完成上周计划或出现暂停/复核周不得加量。"
   }
 }
