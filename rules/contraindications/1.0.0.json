@@ -1,0 +1,133 @@
+{
+  "ruleset": "contraindications",
+  "rules_version": "1.0.0",
+  "effective_from": "2026-09-01",
+  "description": "超慢跑运动处方禁忌规则。裁决顺序：绝对禁忌命中 -> contraindicated；复核规则命中 -> needs_review（信息不足失败安全，不得当作安全）；相对禁忌命中 -> eligible 但计划降阶起步。医生可在记录理由、权限与有效期的前提下覆盖单条规则。",
+  "diagnosis_codes": {
+    "acute_joint_injury": "急性关节损伤",
+    "severe_joint_damage": "严重关节损伤/关节结构破坏",
+    "acute_mi": "急性心肌梗死",
+    "unstable_angina": "不稳定型心绞痛",
+    "acute_heart_failure": "急性心力衰竭/失代偿心衰",
+    "acute_pe": "急性肺栓塞",
+    "uncontrolled_arrhythmia": "未控制的心律失常",
+    "acute_myocarditis": "急性心肌炎/心包炎",
+    "uncontrolled_hypertension_dx": "未控制高血压诊断",
+    "diabetes": "糖尿病",
+    "recent_msk_complaint": "近期肌肉骨骼不适（亚急性）"
+  },
+  "absolute": [
+    {
+      "code": "CI_ACUTE_JOINT_INJURY",
+      "description": "严重/急性关节损伤期禁止负重运动处方",
+      "when": {
+        "any": [
+          {"op": "==", "path": "assessment.joint_injury", "value": true},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "acute_joint_injury"},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "severe_joint_damage"}
+        ]
+      }
+    },
+    {
+      "code": "CI_ACUTE_CARDIOPULMONARY",
+      "description": "急性心肺疾病或未控制的心肺事件期禁止运动处方",
+      "when": {
+        "any": [
+          {"op": "contains", "path": "assessment.diagnoses", "value": "acute_mi"},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "unstable_angina"},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "acute_heart_failure"},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "acute_pe"},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "uncontrolled_arrhythmia"},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "acute_myocarditis"}
+        ]
+      }
+    },
+    {
+      "code": "CI_UNCONTROLLED_HYPERTENSION",
+      "description": "静息血压达到未控制阈值（SBP>=160 或 DBP>=100 mmHg）",
+      "when": {
+        "any": [
+          {"op": ">=", "path": "assessment.recent_metrics.resting_sbp_mmhg", "value": 160},
+          {"op": ">=", "path": "assessment.recent_metrics.resting_dbp_mmhg", "value": 100},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "uncontrolled_hypertension_dx"}
+        ]
+      }
+    },
+    {
+      "code": "CI_UNSTABLE_GLUCOSE",
+      "description": "血糖严重失稳：空腹血糖>=16.7 mmol/L、<3.9 mmol/L 或近期严重低血糖史",
+      "when": {
+        "any": [
+          {"op": ">=", "path": "assessment.recent_metrics.fasting_glucose_mmol_l", "value": 16.7},
+          {"op": "<", "path": "assessment.recent_metrics.fasting_glucose_mmol_l", "value": 3.9},
+          {"op": "==", "path": "assessment.recent_severe_hypoglycemia", "value": true}
+        ]
+      }
+    },
+    {
+      "code": "CI_CLINICAL_PERMISSION_DENIED",
+      "description": "医务人员许可意见明确为拒绝",
+      "when": {"op": "==", "path": "assessment.clinical_permission", "value": "denied"}
+    }
+  ],
+  "review": [
+    {
+      "code": "REVIEW_MISSING_PERMISSION",
+      "description": "临床许可意见缺失或未记录，需人工复核",
+      "when": {
+        "any": [
+          {"op": "missing", "path": "assessment.clinical_permission"},
+          {"op": "==", "path": "assessment.clinical_permission", "value": "not_recorded"}
+        ]
+      }
+    },
+    {
+      "code": "REVIEW_MISSING_AGE",
+      "description": "年龄缺失，无法计算心率区间，需补录后复核",
+      "when": {"op": "missing", "path": "assessment.age"}
+    },
+    {
+      "code": "REVIEW_MISSING_BP",
+      "description": "近期静息血压缺失，需补测后复核",
+      "when": {
+        "any": [
+          {"op": "missing", "path": "assessment.recent_metrics.resting_sbp_mmhg"},
+          {"op": "missing", "path": "assessment.recent_metrics.resting_dbp_mmhg"}
+        ]
+      }
+    },
+    {
+      "code": "REVIEW_MISSING_GLUCOSE",
+      "description": "糖尿病诊断或使用降糖药物时，近期血糖指标缺失需复核",
+      "when": {
+        "all": [
+          {
+            "any": [
+              {"op": "contains", "path": "assessment.diagnoses", "value": "diabetes"},
+              {"op": "contains_any", "path": "assessment.medications", "value": ["insulin", "sulfonylurea", "other_glucose_lowering"]}
+            ]
+          },
+          {
+            "any": [
+              {"op": "missing", "path": "assessment.recent_metrics.fasting_glucose_mmol_l"},
+              {"op": "missing", "path": "assessment.recent_metrics.hba1c_pct"}
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "relative": [
+    {
+      "code": "REL_RECENT_MUSCULOSKELETAL",
+      "description": "近期肌肉骨骼问题：可开具但必须降阶起步并缩短递增节奏",
+      "dose_modifier": "deconditioned_start",
+      "when": {
+        "any": [
+          {"op": "==", "path": "assessment.recent_musculoskeletal", "value": true},
+          {"op": "contains", "path": "assessment.diagnoses", "value": "recent_msk_complaint"}
+        ]
+      }
+    }
+  ]
+}

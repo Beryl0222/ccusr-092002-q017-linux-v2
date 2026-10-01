@@ -1,0 +1,121 @@
+{
+  "ruleset": "monitoring",
+  "rules_version": "1.0.0",
+  "effective_from": "2026-09-01",
+  "description": "运动中与日间监测规则：症状分级、心率/配速/时长偏离、数据缺口、乱序数据与未登记信号。紧急症状只输出明确就医提示，不输出诊断结论。",
+  "symptom_policy": {
+    "unknown_code": {
+      "severity": "suspend",
+      "review_required": true,
+      "finding_code": "UNKNOWN_SIGNAL",
+      "guidance": "收到未登记的症状信号，出于安全考虑暂停运动，请尽快联系医务人员复核，不要自行继续。"
+    },
+    "chest_pain": {
+      "severity": "emergency",
+      "review_required": true,
+      "finding_code": "EMERGENCY_SYMPTOM",
+      "guidance": "立即停止运动、原地休息并尽快拨打急救电话或到急诊就医；不要自行驾车。"
+    },
+    "syncope": {
+      "severity": "emergency",
+      "review_required": true,
+      "finding_code": "EMERGENCY_SYMPTOM",
+      "guidance": "立即停止运动并平卧呼救，尽快由急救评估后就医；不要自行恢复运动。"
+    },
+    "dyspnea_at_rest": {
+      "severity": "emergency",
+      "review_required": true,
+      "finding_code": "EMERGENCY_SYMPTOM",
+      "guidance": "立即停止运动、保持坐位通风，尽快拨打急救电话或到急诊就医。"
+    },
+    "severe_dizziness": {
+      "severity": "emergency",
+      "review_required": true,
+      "finding_code": "EMERGENCY_SYMPTOM",
+      "guidance": "立即停止运动、就地扶稳防跌倒，尽快联系急救或到急诊就医。"
+    },
+    "palpitations": {
+      "severity": "suspend",
+      "review_required": true,
+      "finding_code": "MANUAL_REVIEW_REQUIRED",
+      "guidance": "暂停本次运动并休息观察，尽快联系医务人员评估后再恢复。"
+    },
+    "joint_pain": {
+      "severity": "suspend",
+      "review_required": true,
+      "finding_code": "MANUAL_REVIEW_REQUIRED",
+      "guidance": "停止引起疼痛的动作，暂停运动并联系医务人员评估关节情况。"
+    },
+    "sharp_muscle_pain": {
+      "severity": "caution",
+      "review_required": false,
+      "finding_code": "MANUAL_REVIEW_REQUIRED",
+      "guidance": "降低强度并缩短时长；若疼痛加重或次日不缓解，联系医务人员。"
+    },
+    "mild_soreness": {
+      "severity": "info",
+      "review_required": false,
+      "finding_code": null,
+      "guidance": "可按处方继续，注意热身与跑后放松。"
+    }
+  },
+  "symptom_severity_override_by_reported_severity": {
+    "mild": null,
+    "moderate": "escalate_one_level",
+    "severe": "escalate_to_suspend"
+  },
+  "reading_policy": {
+    "heart_rate_bpm": {
+      "zone_source": "plan.hr_zone",
+      "no_zone_guidance": "该处方使用 RPE 与说话测试控强度（常见于 beta 阻滞剂使用者），心率数值不做区间判定；请以能完整说话、RPE 11-13 为准。",
+      "first_excursion": "caution",
+      "consecutive_excursions_for_suspend": 2,
+      "above_finding_code": "HR_ABOVE_ZONE",
+      "below_finding_code": "HR_BELOW_ZONE",
+      "above_guidance": "心率高于处方区间：立即放慢速度或步行，待回落后再继续；连续超标则结束本次运动。",
+      "below_guidance": "心率低于处方区间：若使用 beta 阻滞剂请以 RPE 为准；否则确认设备佩戴并联系医务人员复核区间。"
+    },
+    "pace_kmh": {
+      "range_source": "plan.pace_kmh",
+      "finding_code": "PACE_DEVIATION",
+      "severity": "caution",
+      "guidance": "配速偏离处方区间，请按处方配速调整。"
+    },
+    "session_minutes": {
+      "range_source": "plan.minutes",
+      "tolerance_pct": 10,
+      "finding_code": "DURATION_DEVIATION",
+      "severity": "info",
+      "guidance": "本次时长与处方不一致；连续少于处方时长将影响递增资格。"
+    },
+    "unknown_metric": {
+      "severity": "caution",
+      "review_required": true,
+      "finding_code": "UNKNOWN_SIGNAL",
+      "guidance": "收到未登记的测量指标，已转人工复核。"
+    }
+  },
+  "data_gap": {
+    "requires_session_marker": true,
+    "default_max_gap_seconds": 300,
+    "questionable_counts_as_present": true,
+    "finding_code": "DATA_GAP",
+    "severity": "suspend",
+    "review_required": true,
+    "guidance": "运动监测数据中断，无法确认安全，立即暂停本次运动；设备恢复并由医务人员确认后再继续。"
+  },
+  "late_data": {
+    "finding_code": "LATE_DATA",
+    "severity": "info",
+    "review_required": false,
+    "guidance": "收到乱序/晚到数据；历史结论不变，受影响日期请查看重放视图。"
+  },
+  "severity_rank": ["info", "caution", "suspend", "emergency"],
+  "day_state_rules": {
+    "emergency": "escalated",
+    "suspend": "suspended",
+    "caution_with_review_required": "escalated",
+    "otherwise": "allowed",
+    "no_active_plan": "not_evaluated"
+  }
+}

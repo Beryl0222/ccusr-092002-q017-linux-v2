@@ -15,5 +15,179 @@
       "minutes": 30,
       "weekly_sessions": 3
     }
+  },
+  "event_semantics": {
+    "summary": "病例是一个只追加的事件流；任何一天的获准、暂停或升级结论都必须能由事件流按 event_time 排序后确定性重放得出。缺失或乱序数据是失败安全信号：信息不足时不得当作已经安全。",
+    "ordering": {
+      "event_time": "ISO-8601 带时区的事件实际发生时间，由数据源提供，用于重放排序",
+      "ingested_at": "ISO-8601 带时区的服务接收时间；晚到事件（ingested_at 晚但 event_time 早）按 event_time 重排，不允许改写已产生的裁决，只允许产生新的复核事件",
+      "tie_break": "event_time 相同的事件按 event_id 字典序确定排序",
+      "idempotency": "同一 event_id 重复投递只生效一次"
+    },
+    "envelope": {
+      "event_id": "字符串，病例内唯一、可幂等",
+      "case_id": "所属病例",
+      "event_type": "见 event_types",
+      "event_time": "ISO-8601 带时区",
+      "ingested_at": "ISO-8601 带时区，可省略，缺省由服务补当前时间",
+      "actor_ref": "产生事件的人或设备标识",
+      "payload": {}
+    },
+    "event_types": {
+      "case_opened": {
+        "description": "开案：录入诊断、近期指标、用药、活动基础与许可意见",
+        "payload_ref": "assessment"
+      },
+      "prescription_decided": {
+        "description": "版本化禁忌规则先裁决能否开具；通过则给出配速、心率区间、时长、频次、热身与递增安排",
+        "payload_ref": "decision"
+      },
+      "override_granted": {
+        "description": "医生覆盖规则；必须写明 reason、authority（权限角色）与 valid_until（有效期）",
+        "payload_ref": "override"
+      },
+      "plan_adjusted": {
+        "description": "计划调整；同时保存 before 与 after 两个完整计划版本与理由",
+        "payload_ref": "adjustment"
+      },
+      "prescription_paused": {
+        "description": "复评或监测触发暂停；写明触发码与人工复核要求",
+        "payload_ref": "pause"
+      },
+      "prescription_resumed": {
+        "description": "医生复核后恢复；必须带医生理由",
+        "payload_ref": "resume"
+      },
+      "symptom_reported": {
+        "description": "患者症状事件；紧急症状只返回明确就医提示，服务不自动诊断",
+        "payload_ref": "symptom"
+      },
+      "device_reading": {
+        "description": "设备测量数据点（心率、配速等）",
+        "payload_ref": "reading"
+      },
+      "session_started": {
+        "description": "一次运动开始；之后预期按监测规则周期性收到心率读数，用于数据缺口判定",
+        "payload_ref": "session"
+      },
+      "session_ended": {
+        "description": "一次运动结束；payload 可带 duration_minutes；未闭合的会话按数据缺口失败安全处理",
+        "payload_ref": "session"
+      },
+      "monitor_finding": {
+        "description": "监测引擎由症状/读数/数据缺口产生的发现：偏离、暂停条件或人工复核需求",
+        "payload_ref": "finding"
+      },
+      "review_resolved": {
+        "description": "人工复核结论，关闭被升级的问题",
+        "payload_ref": "review"
+      }
+    },
+    "payload_shapes": {
+      "assessment": {
+        "diagnoses": ["ICD 或本地诊断码列表"],
+        "recent_metrics": {
+          "resting_sbp_mmhg": "number|null",
+          "resting_dbp_mmhg": "number|null",
+          "hba1c_pct": "number|null",
+          "fasting_glucose_mmol_l": "number|null"
+        },
+        "medications": ["用药码/名称列表，例如 beta_blocker 会改变心率目标策略"],
+        "activity_baseline": "sedentary | lightly_active | regularly_active",
+        "clinical_permission": "granted | denied | not_recorded"
+      },
+      "decision": {
+        "outcome": "eligible | contraindicated | needs_review",
+        "rules_version": "裁决所依据的禁忌规则版本",
+        "plan": "通过时为计划对象，否则为 null",
+        "basis_codes": ["命中的禁忌/通过条件码"]
+      },
+      "override": {
+        "rule_code": "被覆盖的规则码",
+        "reason": "必填，医生理由",
+        "authority": "必填，权限角色，例如 attending_physician",
+        "valid_from": "ISO-8601",
+        "valid_until": "必填，ISO-8601，覆盖到期自动失效，失败安全回到规则默认值"
+      },
+      "adjustment": {
+        "before": "调整前完整计划版本",
+        "after": "调整后完整计划版本",
+        "reason": "调整理由"
+      },
+      "pause": {
+        "trigger_codes": ["触发码"],
+        "review_required": true,
+        "guidance": "给患者的安全提示；急症只提示就医，不给诊断"
+      },
+      "symptom": {
+        "code": "症状码，见 vocabulary.symptom_codes；未登记码按 unknown 处理并升级人工复核",
+        "severity": "mild | moderate | severe"
+      },
+      "reading": {
+        "metric": "heart_rate_bpm | pace_kmh | ...",
+        "value": "number",
+        "quality": "ok | questionable"
+      },
+      "session": {
+        "duration_minutes": "仅 session_ended 可带；缺省时由开始/结束时间计算"
+      },
+      "finding": {
+        "code": "发现码，见 vocabulary.finding_codes",
+        "severity": "info | caution | suspend | emergency",
+        "guidance": "处置提示"
+      },
+      "review": {
+        "finding_event_ids": ["被关闭的发现事件"],
+        "resolution": "resume | keep_suspended | adjust_plan",
+        "note": "医生意见"
+      }
+    },
+    "missing_and_out_of_order": {
+      "missing_is_unsafe": "关键字段（临床许可、近期血压血糖等）缺失时裁决为 needs_review，禁止推断为安全；监测窗口内预期读数缺失产生 DATA_GAP 发现并暂停当日运动许可",
+      "out_of_order": "event_time 早于最后已处理事件的读数标记 late=true；不回改历史结论，重新计算自该时间点起的状态并对受影响日期开放重放视图",
+      "unknown_code": "未登记的症状码或测量码不被静默忽略，产生 UNKNOWN_SIGNAL 复核发现",
+      "questionable_quality": "quality=questionable 的读数不用于区间判定，但计入数据缺口评估"
+    },
+    "replay": {
+      "rule_version_pin": "每次 decision/adjustment/finding 都记录所依据的规则版本；重放历史日期使用事件中钉选的版本，不使用最新规则改写历史",
+      "day_decision": "任意自然日的状态取该日 23:59:59 之前（含）全部事件重放的结果，取值 allowed | suspended | escalated | not_evaluated",
+      "determinism": "相同事件流 + 相同规则包必须产生相同结论；当前时间只用于写入新事件，不参与历史重放"
+    }
+  },
+  "vocabulary": {
+    "contraindication_codes": {
+      "CI_ACUTE_JOINT_INJURY": "严重/急性关节损伤期",
+      "CI_ACUTE_CARDIOPULMONARY": "急性心肺疾病或未控制的心肺事件",
+      "CI_UNCONTROLLED_HYPERTENSION": "血压未控制（静息 SBP/DBP 超阈值）",
+      "CI_UNSTABLE_GLUCOSE": "血糖不稳（空腹血糖超区间或近期严重低血糖史）",
+      "CI_CLINICAL_PERMISSION_DENIED": "临床许可意见为拒绝",
+      "REVIEW_MISSING_PERMISSION": "许可意见缺失，需人工复核",
+      "REVIEW_MISSING_METRICS": "近期关键指标缺失，需人工复核",
+      "REL_RECENT_MUSCULOSKELETAL": "相对禁忌：近期肌肉骨骼问题，需降阶起步"
+    },
+    "symptom_codes": {
+      "chest_pain": "胸痛/胸闷",
+      "syncope": "晕厥或近乎晕厥",
+      "dyspnea_at_rest": "静息呼吸困难",
+      "palpitations": "明显心悸",
+      "severe_dizziness": "严重眩晕",
+      "joint_pain": "关节疼痛",
+      "sharp_muscle_pain": "锐性肌肉疼痛",
+      "mild_soreness": "轻度酸痛"
+    },
+    "finding_codes": {
+      "EMERGENCY_SYMPTOM": "紧急症状：立即停止运动并就医，不做自动诊断",
+      "HR_ABOVE_ZONE": "心率超出处方区间",
+      "HR_BELOW_ZONE": "心率低于处方区间（配合自觉用力度复核，beta 阻滞剂患者尤需）",
+      "PACE_DEVIATION": "配速偏离处方区间",
+      "DURATION_DEVIATION": "时长偏离处方",
+      "DATA_GAP": "预期监测数据缺失，当日不得视为安全",
+      "LATE_DATA": "乱序/晚到数据，历史结论以重放视图为准",
+      "UNKNOWN_SIGNAL": "未登记症状或测量信号，需人工复核",
+      "OVERRIDE_EXPIRED": "医生覆盖已到期，失败安全回到规则默认",
+      "MANUAL_REVIEW_REQUIRED": "需要人工复核"
+    },
+    "day_states": ["allowed", "suspended", "escalated", "not_evaluated"],
+    "outcomes": ["eligible", "contraindicated", "needs_review"]
   }
 }

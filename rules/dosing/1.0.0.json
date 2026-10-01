@@ -1,0 +1,83 @@
+{
+  "ruleset": "dosing",
+  "rules_version": "1.0.0",
+  "effective_from": "2026-09-01",
+  "description": "超慢跑处方剂量规则：配速、心率/自觉用力度区间、单次时长、每周频次、热身放松与递增安排。超慢跑以能完整说话、不喘为强度锚点。",
+  "pace_table": [
+    {
+      "baseline": "sedentary",
+      "pace_kmh": [4.0, 5.0],
+      "comment": "走跑衔接速度，允许随时退回快走"
+    },
+    {
+      "baseline": "lightly_active",
+      "pace_kmh": [4.5, 5.5],
+      "comment": "稳定超慢跑配速"
+    },
+    {
+      "baseline": "regularly_active",
+      "pace_kmh": [5.0, 6.0],
+      "comment": "有规律活动基础的配速上限"
+    }
+  ],
+  "intensity": {
+    "hrr_fraction": [0.40, 0.59],
+    "rpe_scale": "borg_6_20",
+    "rpe_target": [11, 13],
+    "talk_test": "必须能完整说话",
+    "methods": {
+      "hrr": {
+        "requires": ["assessment.age", "assessment.recent_metrics.resting_hr_bpm"],
+        "formula": "target = resting_hr + fraction * (220 - age - resting_hr)，四舍五入取整",
+        "fallback": "缺年龄或静息心率时不给数值心率区间，改用 rpe 方法并标记需补录"
+      },
+      "rpe": {
+        "requires": [],
+        "note": "使用 beta_blocker（或其他显著抑制心率反应的药物）时心率数值不能反映强度，只给 RPE 与说话测试区间"
+      }
+    },
+    "beta_blocker_medications": ["beta_blocker"],
+    "hr_suppressing_medications": ["beta_blocker"]
+  },
+  "volume_table": [
+    {
+      "baseline": "sedentary",
+      "minutes": [10, 20],
+      "weekly_sessions": 3,
+      "warmup_minutes": 8,
+      "cooldown_minutes": 5
+    },
+    {
+      "baseline": "lightly_active",
+      "minutes": [20, 30],
+      "weekly_sessions": 3,
+      "warmup_minutes": 5,
+      "cooldown_minutes": 5
+    },
+    {
+      "baseline": "regularly_active",
+      "minutes": [30, 40],
+      "weekly_sessions": [3, 4],
+      "warmup_minutes": 5,
+      "cooldown_minutes": 5
+    }
+  ],
+  "progression": {
+    "min_weeks_per_step": 2,
+    "duration_increase_cap_pct_per_week": 10,
+    "pace_increase_kmh_per_step": 0.5,
+    "require_full_adherence": "连续两周完成处方时长且无 caution 及以上发现，才允许进入下一阶梯",
+    "deload_on_relative_ci": {
+      "when_modifier": "deconditioned_start",
+      "minutes": [8, 12],
+      "weekly_sessions": 3,
+      "min_weeks_per_step": 3,
+      "pace_kmh": [3.5, 4.5]
+    }
+  },
+  "safety_notes": [
+    "运动前后各测一次血压并记录；降压药使用者注意体位性低血压",
+    "糖尿病患者运动前后测血糖，携带快糖；空腹血糖<5.6 mmol/L 先补充碳水",
+    "出现胸痛、晕厥、静息呼吸困难等紧急症状立即停止并就医"
+  ]
+}
